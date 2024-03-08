@@ -11,6 +11,6 @@ Description of the app ...
 
 ## GitHub Codespaces
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/howard-haowen-rag-with-llamaindex.streamlit.app?quickstart=1)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/howard-haowen/streamlit-starter-kit?quickstart=1)
 
 
