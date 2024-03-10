@@ -1,1 +1,5 @@
 streamlit>=1.26.0
+llama-index
+llama-index-llms-azure-openai
+llama-index-embeddings-azure-openai
+pandas
