@@ -26,15 +26,15 @@ LLM_TEMP = 0 # for LLM temperature
 SIM_TOP_K = 3 # for the number of nodes to retrieve
 PROMPT_MESSAGE = "Ask questions here..."
 PROCESSING_MESSAGE= "Got it! I'm on it..."
-SAMPLE_Q1 = "建議我兩個給貓吃的罐頭"
-SAMPLE_Q2 = "有哪些產品含有鮭魚，而且是台灣本地製造的"
+SAMPLE_Q1 = "我想找給貓吃的罐頭，要含有南瓜"
+SAMPLE_Q2 = "I'm looking for food for adult dogs. They should contain pumpkin and originate from Taiwan."
 ROBOT_MESSAGE = f"""
 Talk to me! I'm your guide for pet products! 🐕🐈 
 What are you looking for today?
 You can ask in Chinese or English.
 Here're just some ideas to get you started with:
-Q: {SAMPLE_Q1}
-Q: {SAMPLE_Q2}
+Q1: {SAMPLE_Q1}
+Q2: {SAMPLE_Q2}
 """
 # For generating fake responses
 RANDOM_RESPONSES = "foo bar yo man look".split()
@@ -156,7 +156,12 @@ new_qa_tmpl = PromptTemplate(new_qa_tmpl_str)
 #===<Start>Customize QA prompt===
 
 
-st.set_page_config(page_title="Chat with the Streamlit docs, powered by LlamaIndex", page_icon="🦙", layout="centered", initial_sidebar_state="auto", menu_items=None)
+st.set_page_config(
+    page_title="Chat for pet products", 
+    page_icon="🐕", 
+    layout="centered", 
+    initial_sidebar_state="auto",
+    menu_items=None)
 st.title("🤖 Intelligent shopping guide for pet products")
 st.info(f"""
         - This app allows you to use natural languages 💬 to find out the pet products you're looking for, 
