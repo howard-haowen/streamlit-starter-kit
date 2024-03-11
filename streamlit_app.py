@@ -2,10 +2,10 @@ import os
 import pandas as pd
 import random # for generating random response in dev
 import streamlit as st
+import time
 
 #===<Start>Import from llama-index framework===
 from llama_index.core import (Document,
-                              SimpleDirectoryReader,
                               VectorStoreIndex,
                               Settings,
                               StorageContext,
@@ -24,9 +24,19 @@ SAMPLE_SIZE = 50 # for the number of records sampled from the dataset
 INDEX_STORAGE_DIR = './storage' # for storing vectors
 LLM_TEMP = 0 # for LLM temperature
 SIM_TOP_K = 3 # for the number of nodes to retrieve
-ROBOT_MESSAGE = "What kinds of pet products are you looking for today?"
 PROMPT_MESSAGE = "Ask questions here..."
 PROCESSING_MESSAGE= "Got it! I'm on it..."
+SAMPLE_Q1 = "建議我兩個給貓吃的罐頭"
+SAMPLE_Q2 = "有哪些產品含有鮭魚，而且是台灣本地製造的"
+ROBOT_MESSAGE = f"""
+Talk to me! I'm your guide for pet products! 🐕🐈 
+What are you looking for today?
+You can ask in Chinese or English.
+Here're just some ideas to get you started with:
+Q: {SAMPLE_Q1}
+Q: {SAMPLE_Q2}
+"""
+# For generating fake responses
 RANDOM_RESPONSES = "foo bar yo man look".split()
 #===<End>Global variables===
 
@@ -37,9 +47,16 @@ llm_deployment_name = st.secrets.Azure.llm_deployment_name
 embed_deployment_name = st.secrets.Azure.embed_deployment_name
 #===<End>Azure OpenAI API secrets===
 
+#===<Start>Utility functions===
 @st.cache_data
 def load_data2df():
     return pd.read_json(DATA_URL)
+
+@st.cache_resource
+def build_index_from_docs():
+    index = VectorStoreIndex.from_documents(documents)
+    index.storage_context.persist(persist_dir=INDEX_STORAGE_DIR)
+    return index
 
 def preprocess_df(df):
     resampled_df = df.sample(n=SAMPLE_SIZE, random_state=1)
@@ -83,12 +100,6 @@ def create_docs(df):
         documents.append(doc)
     return documents
 
-@st.cache_resource
-def build_index_from_docs():
-    index = VectorStoreIndex.from_documents(documents)
-    index.storage_context.persist(persist_dir=INDEX_STORAGE_DIR)
-    return index
-
 def load_index():
     if not os.path.exists(INDEX_STORAGE_DIR):
         # buidl index from documents
@@ -98,6 +109,7 @@ def load_index():
         storage_context = StorageContext.from_defaults(persist_dir=INDEX_STORAGE_DIR)
         index = load_index_from_storage(storage_context)
     return index
+#===<End>Utility functions===
 
 #===<Start>Customize embedding and LLM model===
 api_version = "2023-07-01-preview"
@@ -121,32 +133,75 @@ Settings.llm = llm
 Settings.embed_model = embed_model
 #===<End>Customize embedding and LLM model===
 
-#===<Start>Web UI===
+#===<Start>Customize QA prompt===
+new_qa_tmpl_str = (
+    "You're a pet food expert, and your task is to suggest food products based on the query.\n"
+    "Your suggestions should be appropriate for the type of pet mentioned in the query.\n"
+    "Use metadata to filter out results if necessary.\n"
+    "In your answer, always specify the product id, its name, and what pets it is meant for.\n"
+    "For each product you suggest, always state why it's being recommended.\n"
+    "Always answer in the same langauge as the query language.\n"
+    "Use a friendly and conversational tone to reply."
+
+    "Context information is below.\n"
+    "---------------------\n"
+    "{context_str}\n"
+    "---------------------\n"
+    "Given the context information and not prior knowledge, "
+    "answer the query.\n"
+    "Query: {query_str}\n"
+    "Answer: "
+)
+new_qa_tmpl = PromptTemplate(new_qa_tmpl_str)
+#===<Start>Customize QA prompt===
+
+
 st.set_page_config(page_title="Chat with the Streamlit docs, powered by LlamaIndex", page_icon="🦙", layout="centered", initial_sidebar_state="auto", menu_items=None)
-st.title("🤖: Talk to me! I'm your guide for pet products! 🐕🐈")
-st.info("""
-        Use natural languages to find out pet products you're looking for, 
-        powered by LlamaIndex 💬🦙, 
+st.title("🤖 Intelligent shopping guide for pet products")
+st.info(f"""
+        - This app allows you to use natural languages 💬 to find out the pet products you're looking for, 
+        powered by LlamaIndex 🦙, 
         and inspired by this [Streamlit app](https://llamaindex-chat-with-docs.streamlit.app/).
+        - The dataset for pet products is taken from [here]({DATA_URL}).
+        For this demo, only 50 products are sampled from the dataset.
+        - Tech stack:
+            - LLM and Embedding: Azure OpenAI
+            - LLM Orchestration Framework: LlamaIndex
+            - Backend Coding IDE: Google Colab
+            - Frontend Coding IDE: GitHub Codespaces
+            - Code Hosting: GitHub
+            - Web UI Framework: Streamlit
+            - Web APP Hosting: Streamlit Cloud
         """)
 
 df = read_dataset()
 documents = create_docs(df)
 index = load_index()
 
-#===<Start>Manage session state===
+def stream_init_robot_message():
+    for word in ROBOT_MESSAGE.split(" "):
+        yield word + " "
+        time.sleep(0.05)
+
 # Query engine based on Vector DB
-if "vt_query_engine" not in st.session_state.keys(): 
-    st.session_state.vt_query_engine = index.as_query_engine(similarity_top_k=SIM_TOP_K)
+if "vt_query_engine" not in st.session_state.keys():
+    vt_query_engine = index.as_query_engine(similarity_top_k=SIM_TOP_K)
+    vt_query_engine.update_prompts({"response_synthesizer:text_qa_template": new_qa_tmpl}) 
+    st.session_state.vt_query_engine = vt_query_engine
+
 # Query engine based on Pandas experssion
 if "pd_query_engine" not in st.session_state.keys(): 
     st.session_state.pd_query_engine = PandasQueryEngine(df=df, verbose=True)
-# Chat history
-if "messages" not in st.session_state.keys(): 
+
+# Initialize chat history
+if "messages" not in st.session_state.keys():
+    with st.chat_message("assistant"):
+        st.write_stream(stream_init_robot_message)
     st.session_state.messages = [
         {"role": "assistant", "content": ROBOT_MESSAGE}
     ]
-#===<End>Manage session state===
+
+# Response section for topK retrieval
 def show_retrieval_resp(vt_response):
     # Text response
     response_type = "TopK Retrieval"
@@ -161,16 +216,20 @@ def show_retrieval_resp(vt_response):
         df_to_show = df[df['product_id'].isin(product_ids)]
         st.dataframe(df_to_show)
 
+# Response section for pandas expression
 def show_pandas_resp(pd_response):
     # Text response
     response_type = "Pandas expression"
-    response_message = pd_response.response
-    st.markdown(f"### 🐼 {response_type}")
-    st.markdown(response_message)
-    message = {"role": "assistant", "content": response_type + ": " + response_message}
-    st.session_state.messages.append(message)
-    # Metadata
     pd_expression = pd_response.metadata['pandas_instruction_str']
+    st.markdown(f"### 🐼 {response_type}")
+    st.markdown(f"""
+                ```python
+                {pd_expression}
+                ```
+                """)
+    message = {"role": "assistant", "content": response_type + ": " + pd_expression}
+    st.session_state.messages.append(message)
+    # Try to show a dataframe given a pandas expression
     try:
         df_to_show = eval(pd_expression)
         st.dataframe(df_to_show)
@@ -183,8 +242,11 @@ if prompt := st.chat_input(PROMPT_MESSAGE):
 
 # Iterate over messages saved in st.session_state.messages
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
+    # In order not to show the initial robot message, 
+    # which is streamed via st.write_stream.
+    if len(st.session_state.messages) > 1:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
 
 # Generate a response when the last speaker is not assistant 
 if st.session_state.messages[-1]["role"] != "assistant":
@@ -195,10 +257,7 @@ if st.session_state.messages[-1]["role"] != "assistant":
             response1 = random.choice(RANDOM_RESPONSES)
             response2 = random.choice(RANDOM_RESPONSES)
 
-            col1, col2 = st.columns(2)
-            with col1:
-                show_retrieval_resp(vt_response)
-            with col2:
-                show_pandas_resp(pd_response)
+            show_retrieval_resp(vt_response)
+            show_pandas_resp(pd_response)
 
 
